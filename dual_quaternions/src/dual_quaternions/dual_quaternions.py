@@ -33,7 +33,7 @@ class DualQuaternion(object):
     The rotation part (non-dual) will always be normalized.
     """
 
-    def __init__(self, q_r, q_d, normalize=False, is_point=False):
+    def __init__(self, q_r, q_d, normalize=False):
         if not isinstance(q_r, np.quaternion) or not isinstance(q_d, np.quaternion):
             raise ValueError("q_r and q_d must be of type np.quaternion. Instead received: {} and {}".format(
                 type(q_r), type(q_d)))
@@ -43,7 +43,6 @@ class DualQuaternion(object):
         else:
             self.q_r = q_r
             self.q_d = q_d
-        self.is_point = is_point
 
     def __str__(self):
         return "rotation: {}, translation: {}, \n".format(repr(self.q_r), repr(self.q_d)) + \
@@ -60,9 +59,8 @@ class DualQuaternion(object):
         :return product: DualQuaternion object. Math:
                       dq1 * dq2 = dq1_r * dq2_r + (dq1_r * dq2_d + dq1_d * dq2_r) * eps
         """
-        div = 1 if self.is_point or other.is_point else self.q_r.norm()
         q_r_prod = self.q_r * other.q_r
-        q_d_prod = self.q_r * other.q_d / div + self.q_d * other.q_r
+        q_d_prod = self.q_r * other.q_d / self.q_r.norm() + self.q_d * other.q_r
         product = DualQuaternion(q_r_prod, q_d_prod)
 
         return product
@@ -132,19 +130,13 @@ class DualQuaternion(object):
         :param point_xyz: list or np.array in order: [x y z]
         :return: vector of length 3
         """
-        dq_point = DualQuaternion.from_dq_array(
-            [
-                1, 0, 0, 0,
-                0, point_xyz[0], point_xyz[1], point_xyz[2]
-            ],
-            is_point=True
-        )
-        res_dq = self * dq_point * self.combined_conjugate()
-
-        return res_dq.dq_array()[5:]
+        q_point = np.quaternion(0, point_xyz[0], point_xyz[1], point_xyz[2])
+        c_r = self.q_r.conjugate()
+        q_result = c_r * (2.0 * self.q_d + q_point * self.q_r)
+        return np.array([q_result.x, q_result.y, q_result.z])
 
     @classmethod
-    def from_dq_array(cls, r_wxyz_t_wxyz, is_point=False):
+    def from_dq_array(cls, r_wxyz_t_wxyz):
         """
         Create a DualQuaternion instance from two quaternions in list format
 
@@ -153,7 +145,6 @@ class DualQuaternion(object):
         return cls(
             np.quaternion(*r_wxyz_t_wxyz[:4]),
             np.quaternion(*r_wxyz_t_wxyz[4:]),
-            is_point=is_point
         )
 
     @classmethod
